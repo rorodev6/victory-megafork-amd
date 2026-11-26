@@ -24,6 +24,8 @@ or publisher.
 
 The [AMD testing guide](AMD-TESTING.md) explains how to launch the Stable,
 Performance and experimental FSR 4K profiles and report comparable results.
+It also tracks findings from the fork comparison and the next integration tests.
+See [Contributors and credits](CONTRIBUTORS.md) for upstream attribution.
 
 ## Where it stands (2026-11-26)
 
