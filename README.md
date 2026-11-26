@@ -2,7 +2,7 @@
 
 Victory AMD Megafork is an experimental Windows compatibility layer for user-supplied Xbox Series X|S titles, tuned for Radeon GPUs. It combines Belobug's AMD renderer and texture fixes with selected changes from other VIctory branches. The first test targets are Ryzen PCs with an RX 7900 XTX or RX 9070 XT.
 
-[Testing guide](AMD-TESTING.md) · [Contributors and credits](CONTRIBUTORS.md) · [Original Belobug documentation](README.belobug.md) · [NVIDIA megafork](https://github.com/rorodev6/victory-nvidia-megafork-private)
+[Agent setup guide](AGENTS.md) · [Testing guide](AMD-TESTING.md) · [Contributors and credits](CONTRIBUTORS.md) · [Original Belobug documentation](README.belobug.md) · [NVIDIA megafork](https://github.com/rorodev6/victory-nvidia-megafork-private)
 
 ## What has been combined
 
