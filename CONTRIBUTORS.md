@@ -7,6 +7,7 @@ The repository keeps the Belobug Git history, including original commit authors,
 - [Marvisak and VIctory contributors](https://github.com/Marvisak/VIctory) created and developed the upstream runtime.
 - [Belobug and contributors](https://github.com/Belobug/VIctory-Belobug-AMD) maintain the AMD base, including the renderer, texture and launch work used here. The upstream acknowledgements remain in the README and license notices.
 - [DexNom and contributors](https://github.com/DexNom/VIctory/commit/ab34a8b21477c94da2a6cf07249138e8bc84602e) supplied the PC FidelityFX integration that Belobug ported.
+- [Filip722](https://github.com/Filip722) wrote the [pipeline job completion fix](https://github.com/fxceless/victory-fork/pull/1353) adapted from fxceless into the megafork.
 - [rorodev6](https://github.com/rorodev6) owns and maintains the AMD Megafork project.
 
 ## Compared during research
