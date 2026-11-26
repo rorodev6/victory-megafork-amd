@@ -1,6 +1,6 @@
 # Victory AMD Megafork
 
-The first build is based on [Belobug `cd8dfc0`](https://github.com/Belobug/VIctory-Belobug-AMD/commit/cd8dfc0). The initial test targets are Windows 11 PCs with Ryzen CPUs and RX 7900 XTX or RX 9070 XT GPUs. They are validation targets, not a published compatibility list. The runtime requires your own game files.
+The first build is based on [Belobug `cd8dfc0`](https://github.com/Belobug/VIctory-Belobug-AMD/commit/cd8dfc0). The initial test targets are Windows 11 PCs with Ryzen CPUs and RX 7900 XTX or RX 9070 XT GPUs. Windows 10 22H2 uses the [Agility SDK setup](README.md#windows-10-setup) and still needs an in-game test. The runtime requires your own game files.
 
 Build with `cargo build --locked --profile diag -p victory --features diagnostics` and launch from the repository root:
 

@@ -1,40 +1,94 @@
 # Victory AMD Megafork
 
-Victory AMD Megafork is an experimental Windows compatibility layer for running a user-supplied Xbox Series X|S title. We combine Belobug's AMD renderer with selected fixes from other VIctory projects, then test them on the same scenes before changing the default profile. The current targets are Windows 11 PCs with a Ryzen CPU and a Radeon RX 7900 XTX or RX 9070 XT. Those cards are test targets, and compatibility across Radeon generations is still being measured.
+Victory AMD Megafork is an experimental Windows compatibility layer for user-supplied Xbox Series X|S titles, tuned for Radeon GPUs. It combines Belobug's AMD renderer and texture fixes with selected changes from other VIctory branches. The first test targets are Ryzen PCs with an RX 7900 XTX or RX 9070 XT.
 
-[Build and test guide](AMD-TESTING.md) · [Contributors and credits](CONTRIBUTORS.md) · [Original Belobug documentation](README.belobug.md)
+[Testing guide](AMD-TESTING.md) · [Contributors and credits](CONTRIBUTORS.md) · [Original Belobug documentation](README.belobug.md) · [NVIDIA megafork](https://github.com/rorodev6/victory-nvidia-megafork-private)
 
 ## What has been combined
 
-| Project | What it contributes to this build |
+| Project | What it contributes |
 | --- | --- |
-| [Marvisak / VIctory](https://github.com/Marvisak/VIctory) | The Xbox runtime, Direct3D 12 rendering layer, and shader translator. |
-| [Belobug / VIctory-Belobug-AMD](https://github.com/Belobug/VIctory-Belobug-AMD) | The AMD base at [`cd8dfc0`](https://github.com/Belobug/VIctory-Belobug-AMD/commit/cd8dfc0), including the texture submission-order fix. |
+| [Marvisak / VIctory](https://github.com/Marvisak/VIctory) | The Xbox runtime, Direct3D 12 renderer, and shader translator. |
+| [Belobug / VIctory-Belobug-AMD](https://github.com/Belobug/VIctory-Belobug-AMD) | The AMD base at [cd8dfc0](https://github.com/Belobug/VIctory-Belobug-AMD/commit/cd8dfc0), including the texture submission-order fix. |
 | [DexNom / VIctory](https://github.com/DexNom/VIctory) | The experimental PC FidelityFX integration carried through Belobug. |
-| [fxceless / victory-fork](https://github.com/fxceless/victory-fork) | An adapted fix by [Filip722](https://github.com/Filip722) that marks a failed pipeline job complete after a Rust panic. The [port](https://github.com/rorodev6/victory-amd-megafork-private/commit/af875f2) passed eight targeted tests. |
-| [rorodev6](https://github.com/rorodev6) | The megafork, AMD launch profiles, and shared benchmark guide. |
+| [fxceless / victory-fork](https://github.com/fxceless/victory-fork) | [Filip722's pipeline job recovery](https://github.com/fxceless/victory-fork/pull/1353) wakes waiting work after a Rust panic. [domints' Agility SDK support](https://github.com/fxceless/victory-fork/pull/402) supplies the Windows 10 runtime. |
+| [rorodev6 / victory](https://github.com/rorodev6/victory) | The [Windows 10 adaptation](https://github.com/rorodev6/victory/commit/bdd68c2), Radeon launch profiles, and shared benchmark guide. |
 
-**Also reviewed:** Cool Fox (codec_d), [AvatarManz](https://github.com/avatarmanz/VIctory-7900XTX), [Geckomacabre](https://github.com/Geckomacabre/vx-layer), [HrHd](https://github.com/HrHd/victory-fork), and [shadowdog00](https://github.com/shadowdog00). Proposed ports are listed in the [integration queue](AMD-TESTING.md#integration-queue). The [GitHub contributor history](https://github.com/rorodev6/victory-amd-megafork-private/graphs/contributors) is generated from Git history. This table provides visible attribution on the project homepage.
+Cool Fox (codec_d), [AvatarManz](https://github.com/avatarmanz/VIctory-7900XTX), [Geckomacabre](https://github.com/Geckomacabre/vx-layer), [HrHd](https://github.com/HrHd/victory-fork), and [shadowdog00](https://github.com/shadowdog00) are references for the [integration queue](AMD-TESTING.md#integration-queue). See the [Git history](https://github.com/rorodev6/victory-amd-megafork-private/graphs/contributors) for commit authors.
 
-## Build and run
+## Requirements
 
-Use the Rust toolchain pinned in this repository and the MSVC C++ build tools with a Windows SDK. From the project root:
+- Windows 11 x64 or Windows 10 22H2 x64 (build 19045) for the Windows 10 setup below. Run `winver` to check the version.
+- An x64 CPU with AVX2 and a Direct3D 12 GPU with Shader Model 6.6 and mesh shader support. Use a current driver that supports your GPU and Windows version.
+- Rust via rustup, the MSVC C++ build tools, and a Windows SDK. Cargo selects the Rust version pinned by the repository.
+- Your own title files in a folder outside the clone. Keep local configuration, game files, generated shader caches, and saves out of Git.
+
+## Build and first launch
+
+Clone with an account that can access the private repository. Set the local paths in `victory.toml` before launching.
+
+```powershell
+git clone https://github.com/rorodev6/victory-amd-megafork-private.git
+Set-Location victory-amd-megafork-private
+Copy-Item .\victory.example.toml .\victory.toml
+```
+
+On Windows 10, follow the [SDK setup](#windows-10-setup) first. From the root of the clone:
 
 ```powershell
 cargo build --locked --profile diag -p victory --features diagnostics
 .\scripts\play-amd.ps1 -Exe 'D:\Games\Example\game.exe' -Profile Stable
 ```
 
-| Profile | Use it for |
+## Windows 10 setup
+
+Windows 10's built-in Direct3D 12 runtime can stop at Shader Model 6.5. Victory needs Shader Model 6.6 to use direct descriptor heap indexing. The Windows 10 build uses Microsoft's app-local [D3D12 Agility SDK](https://devblogs.microsoft.com/directx/gettingstarted-dx12agility/).
+
+From the repository root, install the SDK before building the executable:
+
+```powershell
+cargo xtask agility
+cargo build --locked --profile diag -p victory --features diagnostics
+.\target\diag\victory.exe config
+```
+
+`cargo xtask agility` downloads `Microsoft.Direct3D.D3D12` 1.620.2 from NuGet, checks its SHA-512, and extracts the x64 DLLs into `target\diag\D3D12\` and the corresponding `debug` and `release` folders. It requires an internet connection on the first run. The DLLs stay in the build directory. No administrator access is needed.
+
+Check that `victory.exe config` reports `app-local SDK 620` and shows the path to `D3D12Core.dll`. If you move the executable, move its `D3D12` folder with it. An existing executable needs a rebuild after installing the SDK. On Windows 11 the SDK step is optional. If the DLL disappears from a build directory, rebuild before starting the executable from that directory again.
+
+The Agility SDK build path has been checked on Windows 11. In-game validation on Windows 10 is pending. The Agility SDK still requires GPU and driver support for the features above.
+
+## Radeon launch profiles
+
+| Profile | Output and settings | When to use it |
+| --- | --- | --- |
+| **Stable** | Series S with Belobug's conservative settings and synchronized texture reads. | First launch and checks for black faces, missing surfaces, or device errors. |
+| **Performance** | Series S with faster submission settings. The launcher keeps texture waits and the indirect draw safeguard. | Compare with Stable on the same scene after the shader cache has warmed. |
+| **Fsr4K** | Series X with the PC FidelityFX DX12 upscaler. Performance mode requests 1080p input and 4K output. | Evaluate the 4K result separately on hardware with headroom. |
+
+```powershell
+.\scripts\play-amd.ps1 -Exe 'D:\Games\Example\game.exe' -Profile Performance
+.\scripts\play-amd.ps1 -Exe 'D:\Games\Example\game.exe' -Profile Fsr4K -FidelityFxDir 'D:\victory-data\fidelityfx'
+```
+
+The `-FidelityFxDir` folder must contain the official AMD `amd_fidelityfx_upscaler_dx12.dll`. It is separate from the Microsoft `D3D12` folder. See the [Belobug notes](README.belobug.md) for the upscaler version and additional renderer switches.
+
+## Troubleshooting
+
+| Symptom | What to check |
 | --- | --- |
-| **Stable** | First launch and troubleshooting. Series S with synchronized texture reads and Belobug's conservative preset. |
-| **Performance** | Comparing Belobug's faster settings in Series S. Compare against Stable on the same route. |
-| **Fsr4K** | Experimental Series X mode with 1080p input and 4K output. Supply `-FidelityFxDir` with the official AMD DX12 upscaler. |
+| Shader Model 6.5 or `D3D12_ERROR_INVALID_REDIST` | Run the SDK setup and inspect `victory.exe config`. Verify that the two DLLs are beside the executable in `D3D12\` and that the driver supports Shader Model 6.6. |
+| Black faces, missing walls, or a GPU reset | Reproduce on Stable. Record the first affected scene, whether the issue persists on a second run, and the exact driver and build. |
+| First run stutters | New shader translations and driver pipeline creation can interrupt rendering. Exit normally, then repeat the same scene with the same cache to measure the difference. |
+| Performance barely changes after lowering image quality | Log frame time and VRAM on the same route. Lower resolution reduces pixel work. Shader compilation, uploads, and CPU submission can still limit frame rate. |
+| Fsr4K fails before showing a frame | Verify the DX12 upscaler path. Use Stable to check that the basic renderer starts. |
 
-## Help validate Radeon support
+## Cache, saves, and benchmark reports
 
-Repeat the opening close-up, a fixed route through the city, and the boat sequence. Record your CPU, Radeon model, driver, RAM, commit and launch profile. Report median and p95 frame times, peak VRAM, missing surfaces and any GPU resets. Compare cold and warm caches separately. The goal is stable **30 FPS in 3D with correct rendering**. Menu FPS and isolated clips are excluded from that target.
+The `config` command shows the resolved game, cache, and data paths. By default, generated cache data is under `%LOCALAPPDATA%\victory\cache` and local title data is under `%LOCALAPPDATA%\victory\data`. To compare builds with separate caches or saves, use explicit `VICTORY_CACHE_DIR` and `VICTORY_DATA_DIR` paths outside the clone.
+
+Repeat the opening close-up, a fixed city route, and the boat sequence. Record Windows build, commit, CPU, GPU, driver, RAM, profile, resolution, median and p95 frame times, peak VRAM, and visual faults. Record cold and warm results separately. The goal is stable **30 FPS in 3D with correct rendering**. Compare gameplay and cutscene measurements separately from menu FPS. See the [AMD testing guide](AMD-TESTING.md).
 
 ## License
 
-GPL-3.0-or-later. See [LICENSE](LICENSE), the [preserved upstream credits](README.belobug.md#credits), and the [asset policy](docs/asset-policy.md). This repository contains the runtime and scripts. Supply your own game files locally.
+GPL-3.0-or-later. See [LICENSE](LICENSE), [upstream credits](README.belobug.md#credits), and the [asset policy](docs/asset-policy.md). Supply your own title files locally.
