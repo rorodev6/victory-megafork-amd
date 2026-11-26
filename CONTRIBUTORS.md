@@ -1,6 +1,6 @@
 # Contributors and credits
 
-The repository keeps the Belobug Git history, including original commit authors, co-authors and upstream notices. Use the commit history for individual authorship.
+The repository keeps the Belobug Git history, including original commit authors, co-authors and upstream notices. See [GitHub Contributors](https://github.com/rorodev6/victory-amd-megafork-private/graphs/contributors) for the accounts GitHub identifies from that history. The credits below also cover work reviewed or ported indirectly.
 
 ## In the current base
 
@@ -12,5 +12,7 @@ The repository keeps the Belobug Git history, including original commit authors,
 ## Compared during research
 
 [fxceless and contributors](https://github.com/fxceless/victory-fork), including tippythetaidum for [the 16-bit facial animation fix](https://github.com/fxceless/victory-fork/pull/927), codec_d and the Cool Fox contributors, [AvatarManz and contributors](https://github.com/avatarmanz/VIctory-7900XTX), [Geckomacabre](https://github.com/Geckomacabre/vx-layer), and [HrHd](https://github.com/HrHd/victory-fork) supplied code, reports or ideas reviewed in the audit. The [integration queue](AMD-TESTING.md#integration-queue) distinguishes proposed imports from what is already included in the base.
+
+[shadowdog00 and the vi-pc-combo contributors](https://github.com/shadowdog00/vi-pc-combo) are credited in the [rorodev6/victory build](https://github.com/rorodev6/victory/commit/4ddc0c1) used for earlier comparisons.
 
 When adapting a patch, credit the original author and link the source commit or pull request in the new commit message. Keep the upstream license and notices with any redistributed code.
