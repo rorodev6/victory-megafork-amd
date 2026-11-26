@@ -2,7 +2,7 @@
 
 Victory AMD Megafork is an experimental Windows compatibility layer for user-supplied Xbox Series X|S titles, tuned for Radeon GPUs. It combines Belobug's AMD renderer and texture fixes with selected changes from other VIctory branches. The first test targets are Ryzen PCs with an RX 7900 XTX or RX 9070 XT.
 
-[Agent setup guide](AGENTS.md) · [Testing guide](AMD-TESTING.md) · [Contributors and credits](CONTRIBUTORS.md) · [Original Belobug documentation](README.belobug.md) · [NVIDIA megafork](https://github.com/rorodev6/victory-nvidia-megafork-private)
+[Agent setup guide](AGENTS.md) · [Testing guide](AMD-TESTING.md) · [Contributors and credits](CONTRIBUTORS.md) · [Original Belobug documentation](README.belobug.md) · [NVIDIA megafork](https://github.com/rorodev6/victory-nvidia-megafork)
 
 ## What has been combined
 
@@ -14,7 +14,7 @@ Victory AMD Megafork is an experimental Windows compatibility layer for user-sup
 | [fxceless / victory-fork](https://github.com/fxceless/victory-fork) | [Filip722's pipeline job recovery](https://github.com/fxceless/victory-fork/pull/1353) wakes waiting work after a Rust panic. [domints' Agility SDK support](https://github.com/fxceless/victory-fork/pull/402) supplies the Windows 10 runtime. |
 | [rorodev6 / victory](https://github.com/rorodev6/victory) | The [Windows 10 adaptation](https://github.com/rorodev6/victory/commit/bdd68c2), Radeon launch profiles, and shared benchmark guide. |
 
-Cool Fox (codec_d), [AvatarManz](https://github.com/avatarmanz/VIctory-7900XTX), [Geckomacabre](https://github.com/Geckomacabre/vx-layer), [HrHd](https://github.com/HrHd/victory-fork), and [shadowdog00](https://github.com/shadowdog00) are references for the [integration queue](AMD-TESTING.md#integration-queue). See the [Git history](https://github.com/rorodev6/victory-amd-megafork-private/graphs/contributors) for commit authors.
+Cool Fox (codec_d), [AvatarManz](https://github.com/avatarmanz/VIctory-7900XTX), [Geckomacabre](https://github.com/Geckomacabre/vx-layer), [HrHd](https://github.com/HrHd/victory-fork), and [shadowdog00](https://github.com/shadowdog00) are references for the [integration queue](AMD-TESTING.md#integration-queue). See the [Git history](https://github.com/rorodev6/victory-megafork-amd/graphs/contributors) for commit authors.
 
 ## Requirements
 
@@ -25,11 +25,11 @@ Cool Fox (codec_d), [AvatarManz](https://github.com/avatarmanz/VIctory-7900XTX),
 
 ## Build and first launch
 
-Clone with an account that can access the private repository. Set the local paths in `victory.toml` before launching.
+Set the local paths in `victory.toml` before launching.
 
 ```powershell
-git clone https://github.com/rorodev6/victory-amd-megafork-private.git
-Set-Location victory-amd-megafork-private
+git clone https://github.com/rorodev6/victory-megafork-amd.git
+Set-Location victory-megafork-amd
 Copy-Item .\victory.example.toml .\victory.toml
 ```
 

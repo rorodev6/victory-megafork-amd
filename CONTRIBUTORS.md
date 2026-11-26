@@ -1,6 +1,6 @@
 # Contributors and credits
 
-The repository keeps the Belobug Git history, including original commit authors, co-authors and upstream notices. See [GitHub Contributors](https://github.com/rorodev6/victory-amd-megafork-private/graphs/contributors) for the accounts GitHub identifies from that history. The credits below also cover work reviewed or ported indirectly.
+The repository keeps the Belobug Git history, including original commit authors, co-authors and upstream notices. See [GitHub Contributors](https://github.com/rorodev6/victory-megafork-amd/graphs/contributors) for the accounts GitHub identifies from that history. The credits below also cover work reviewed or ported indirectly.
 
 ## In the current base
 
