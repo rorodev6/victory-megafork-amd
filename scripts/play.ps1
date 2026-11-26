@@ -10,6 +10,7 @@ param(
     [Parameter(Mandatory)][string]$Exe,
     [switch]$Safe,
     [switch]$RayTracing,
+    [ValidateSet('series-x', 'series-s')][string]$Console = 'series-x',
     [ValidateSet('quality', 'balanced', 'performance')][string]$Fsr4K,
     [ValidateSet('diag', 'release')][string]$Build = 'diag',
     [hashtable]$More = @{}
@@ -45,4 +46,4 @@ if ($discarded) {
 }
 $Exe = (Resolve-Path $Exe).Path
 Push-Location (Join-Path $PSScriptRoot '..')   # victory.toml is looked for here
-try { & $victory run $Exe --execute } finally { Pop-Location }
+try { & $victory run $Exe --console $Console --execute } finally { Pop-Location }

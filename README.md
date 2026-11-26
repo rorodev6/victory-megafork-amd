@@ -20,6 +20,11 @@ lighting that is too bright or too dark when walking indoors are next in line.
 copy of the game. It is not affiliated with or endorsed by the game's developer
 or publisher.
 
+## AMD Megafork testing
+
+The [AMD testing guide](AMD-TESTING.md) explains how to launch the Stable,
+Performance and experimental FSR 4K profiles and report comparable results.
+
 ## Where it stands (2026-11-26)
 
 Tested on one machine only: Windows 11, Intel i9-12900K, 64 GB RAM, Radeon
