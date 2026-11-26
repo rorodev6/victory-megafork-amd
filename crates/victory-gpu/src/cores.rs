@@ -93,6 +93,162 @@ fn l3_of_sets() -> Vec<(u32, u32)> {
     sizes
 }
 
+/// The last-level cache each processor set of group 0 shares, by set id: the
+/// lowest logical processor index under that cache (so the one holding
+/// processor 0 is domain 0). On a Ryzen with two complexes alike (5900X,
+/// 5950X, 7950X, 9950X) that is one domain per complex; the 3000 series has
+/// one per four-core group.
+fn l3_domain_of_sets() -> Vec<(u32, u32)> {
+    use windows_sys::Win32::System::SystemInformation::{
+        GetLogicalProcessorInformationEx, GetSystemCpuSetInformation, RelationCache, SYSTEM_CPU_SET_INFORMATION,
+        SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX,
+    };
+    use windows_sys::Win32::System::Threading::GetCurrentProcess;
+    // The largest cache of each logical processor of group 0: its size and the
+    // processors it serves.
+    let mut by_processor = [(0u32, 0usize); 64];
+    let mut bytes = 0u32;
+    // SAFETY: a size query, then the call into a buffer of that size.
+    unsafe { GetLogicalProcessorInformationEx(RelationCache, std::ptr::null_mut(), &mut bytes) };
+    let mut buffer = vec![0u64; (bytes as usize).div_ceil(8).max(1)];
+    // SAFETY: as above; the buffer holds `bytes` bytes, aligned for the records.
+    let ok = unsafe { GetLogicalProcessorInformationEx(RelationCache, buffer.as_mut_ptr().cast(), &mut bytes) };
+    let mut at = 0usize;
+    while ok != 0 && at + size_of::<SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>() <= bytes as usize {
+        // SAFETY: a record inside the buffer; each says its own size.
+        let info = unsafe { &*(buffer.as_ptr().cast::<u8>().add(at).cast::<SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX>()) };
+        if info.Size == 0 {
+            break;
+        }
+        if info.Relationship == RelationCache {
+            // SAFETY: a cache record (asked for), with at least its first group mask.
+            let cache = unsafe { &info.Anonymous.Cache };
+            let mask = unsafe { cache.Anonymous.GroupMask };
+            if mask.Group == 0 {
+                for (p, slot) in by_processor.iter_mut().enumerate() {
+                    if mask.Mask >> p & 1 != 0 && cache.CacheSize > slot.0 {
+                        *slot = (cache.CacheSize, mask.Mask);
+                    }
+                }
+            }
+        }
+        at += info.Size as usize;
+    }
+    // Processor indices to set ids.
+    let mut bytes = 0u32;
+    // SAFETY: as for `cpu_sets`.
+    unsafe { GetSystemCpuSetInformation(std::ptr::null_mut(), 0, &mut bytes, GetCurrentProcess(), 0) };
+    let mut buffer = vec![0u64; (bytes as usize).div_ceil(8).max(1)];
+    // SAFETY: as above.
+    let ok = unsafe { GetSystemCpuSetInformation(buffer.as_mut_ptr().cast(), bytes, &mut bytes, GetCurrentProcess(), 0) };
+    let mut domains = Vec::new();
+    let mut at = 0usize;
+    while ok != 0 && at + size_of::<SYSTEM_CPU_SET_INFORMATION>() <= bytes as usize {
+        // SAFETY: a record inside the buffer; each says its own size.
+        let info = unsafe { &*(buffer.as_ptr().cast::<u8>().add(at).cast::<SYSTEM_CPU_SET_INFORMATION>()) };
+        if info.Size == 0 {
+            break;
+        }
+        // SAFETY: the record's type is CpuSet (the only one there is).
+        let set = unsafe { &info.Anonymous.CpuSet };
+        if set.Group == 0
+            && let Some(&(size, mask)) = by_processor.get(set.LogicalProcessorIndex as usize)
+            && size != 0
+            && mask != 0
+        {
+            domains.push((set.Id, mask.trailing_zeros()));
+        }
+        at += info.Size as usize;
+    }
+    domains
+}
+
+/// Where our threads go on a processor of several last-level caches all of
+/// one size (`VICTORY_CCD`): `far` (all of them away from the cache holding
+/// processor 0, where the title pins its own threads, so that those have
+/// their cores to themselves), `near` (the threads a frame waits for beside
+/// the title's, on the cache its data is in; the many that translate lists
+/// away from it), or off (unset or `0`: as before, anywhere). With
+/// `VICTORY_AB=<s>,VICTORY_CCD` (diagnostics) it changes while the title
+/// runs; `VICTORY_CCD_MODE=near` then picks `near` for its on phases.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Ccd {
+    Off,
+    Near,
+    Far,
+}
+
+fn ccd_from(text: Option<String>) -> Ccd {
+    match text.as_deref().map(|v| v.trim().to_ascii_lowercase()).as_deref() {
+        Some("far") | Some("1") => Ccd::Far,
+        Some("near") => Ccd::Near,
+        _ => Ccd::Off,
+    }
+}
+
+fn ccd_static() -> Ccd {
+    static MODE: std::sync::OnceLock<Ccd> = std::sync::OnceLock::new();
+    *MODE.get_or_init(|| ccd_from(std::env::var("VICTORY_CCD").ok()))
+}
+
+fn ccd() -> Ccd {
+    #[cfg(feature = "diagnostics")]
+    if let Some(on) = crate::ab::pick("VICTORY_CCD") {
+        if !on {
+            return Ccd::Off;
+        }
+        return match ccd_from(std::env::var("VICTORY_CCD_MODE").ok()) {
+            Ccd::Near => Ccd::Near,
+            _ => Ccd::Far,
+        };
+    }
+    ccd_static()
+}
+
+/// Whether [`ccd`] can be on at some point of this run.
+fn ccd_possible() -> bool {
+    #[cfg(feature = "diagnostics")]
+    if crate::ab::bit("VICTORY_CCD").is_some() {
+        return true;
+    }
+    ccd_static() != Ccd::Off
+}
+
+/// The sets of the cache holding processor 0 and those of the others, where
+/// there are two or more last-level caches, all of one size, and no class or
+/// cache already makes some cores the fast ones (`domains`: domain by set id,
+/// [`l3_domain_of_sets`]). `None` otherwise (one complex, X3D, two kinds of
+/// cores, or nothing known).
+fn ccd_split(sets: &[(u32, u8, u8)], l3: &[(u32, u32)], domains: &[(u32, u32)]) -> Option<(Vec<u32>, Vec<u32>)> {
+    if !fast_by_class(sets).is_empty() || !fast_by_cache(sets, l3).is_empty() {
+        return None;
+    }
+    let domain = |id: u32| domains.iter().find(|d| d.0 == id).map(|d| d.1);
+    if sets.iter().any(|s| domain(s.0).is_none()) {
+        return None;
+    }
+    let mut ids: Vec<u32> = sets.iter().filter_map(|s| domain(s.0)).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    let &home = ids.first()?;
+    if ids.len() < 2 {
+        return None;
+    }
+    let near: Vec<u32> = sets.iter().filter(|s| domain(s.0) == Some(home)).map(|s| s.0).collect();
+    let far: Vec<u32> = sets.iter().filter(|s| domain(s.0) != Some(home)).map(|s| s.0).collect();
+    Some((near, far))
+}
+
+fn l3_sizes() -> &'static [(u32, u32)] {
+    static L3: std::sync::OnceLock<Vec<(u32, u32)>> = std::sync::OnceLock::new();
+    L3.get_or_init(l3_of_sets)
+}
+
+fn l3_domains() -> &'static [(u32, u32)] {
+    static DOMAINS: std::sync::OnceLock<Vec<(u32, u32)>> = std::sync::OnceLock::new();
+    DOMAINS.get_or_init(l3_domain_of_sets)
+}
+
 /// Whether the cores of the largest last-level cache count as the fast
 /// ones where all cores are of one class (`VICTORY_CACHE_CORES=0`: not).
 /// On a processor with two core complexes of which one has the stacked cache
@@ -133,15 +289,33 @@ fn fast_by_cache(sets: &[(u32, u8, u8)], l3: &[(u32, u32)]) -> Vec<u32> {
 }
 
 /// The fast sets: those of the fastest class if there are slower ones, else
-/// those of the largest cache ([`cache_cores`]). `now`: as things are at this
+/// those of the largest cache ([`cache_cores`]), else, where the caches are
+/// several and alike, those [`ccd`] picks (`far`: the caches without
+/// processor 0; `near`: the one with it). `now`: as things are at this
 /// moment (else whether there could be any, for threads to ask at all).
 fn fast_sets(sets: &[(u32, u8, u8)], now: bool) -> Vec<u32> {
     let by_class = fast_by_class(sets);
-    if !by_class.is_empty() || (now && !cache_cores()) {
+    if !by_class.is_empty() {
         return by_class;
     }
-    static L3: std::sync::OnceLock<Vec<(u32, u32)>> = std::sync::OnceLock::new();
-    fast_by_cache(sets, L3.get_or_init(l3_of_sets))
+    if !now || cache_cores() {
+        let by_cache = fast_by_cache(sets, l3_sizes());
+        if !by_cache.is_empty() {
+            return by_cache;
+        }
+    }
+    let mode = if now {
+        ccd()
+    } else if ccd_possible() {
+        Ccd::Far
+    } else {
+        Ccd::Off
+    };
+    match (mode, ccd_split(sets, l3_sizes(), l3_domains())) {
+        (Ccd::Near, Some((near, _))) => near,
+        (Ccd::Far, Some((_, far))) => far,
+        _ => Vec::new(),
+    }
 }
 
 fn fast_of(sets: &[(u32, u8, u8)]) -> Vec<u32> {
@@ -173,8 +347,9 @@ fn lane_core() -> bool {
     *ON.get_or_init(|| std::env::var_os("VICTORY_LANE_CORE").is_some_and(|v| v == "1"))
 }
 
-/// Threads that asked: a handle of each, and whether it is the submitting one.
-static ASKED: std::sync::Mutex<Vec<(usize, bool)>> = std::sync::Mutex::new(Vec::new());
+/// Threads that asked: a handle of each, whether it is the submitting one,
+/// and its stage (1 to 3, as [`stage`]).
+static ASKED: std::sync::Mutex<Vec<(usize, bool, u32)>> = std::sync::Mutex::new(Vec::new());
 
 /// What the threads of the process, and those that asked, are told now
 /// ([`lane_core`], which may have changed).
@@ -197,9 +372,15 @@ pub(crate) fn settle() {
         Some((own, _)) => fast.iter().copied().filter(|id| !own.contains(id)).collect(),
         None => fast.clone(),
     };
-    for &(thread, lane) in ASKED.lock().unwrap_or_else(|e| e.into_inner()).iter() {
-        let sets = match &one {
-            Some((own, _)) if lane => own,
+    // `VICTORY_CCD=near`: the many threads that translate lists go away from
+    // the title's cache, the rest stays beside it.
+    let mode = ccd();
+    let away: Option<Vec<u32>> =
+        if mode == Ccd::Near { ccd_split(&sets, l3_sizes(), l3_domains()).map(|(_, far)| far) } else { None };
+    for &(thread, lane, from) in ASKED.lock().unwrap_or_else(|e| e.into_inner()).iter() {
+        let sets = match (&one, &away) {
+            (Some((own, _)), _) if lane => own,
+            (_, Some(far)) if from == 3 => far,
             _ => &helpers,
         };
         // SAFETY: a handle kept open, and the system's own set ids.
@@ -210,8 +391,9 @@ pub(crate) fn settle() {
         fast = fast.len(),
         of = sets.len(),
         by_cache = fast_by_class(&sets).is_empty() && !fast.is_empty(),
+        ccd = ?mode,
         threads = ASKED.lock().unwrap_or_else(|e| e.into_inner()).len(),
-        "our threads' processors (VICTORY_CACHE_CORES)"
+        "our threads' processors (VICTORY_CACHE_CORES, VICTORY_CCD)"
     );
 }
 
@@ -250,7 +432,8 @@ fn ask(what: &str, from: u32) {
     use windows_sys::Win32::System::Threading::{
         GetCurrentThreadId, OpenThread, THREAD_SET_LIMITED_INFORMATION,
     };
-    if stage() < from {
+    // The many (stage 3) ask too where `VICTORY_CCD` may place them.
+    if stage() < from && !(from == 3 && ccd_possible()) {
         return;
     }
     static FAST: std::sync::OnceLock<(Vec<u32>, usize)> = std::sync::OnceLock::new();
@@ -270,7 +453,7 @@ fn ask(what: &str, from: u32) {
         tracing::warn!(what, error = %std::io::Error::last_os_error(), "the thread could not be kept on the fast cores");
         return;
     }
-    ASKED.lock().unwrap_or_else(|e| e.into_inner()).push((thread as usize, what == "victory-submit"));
+    ASKED.lock().unwrap_or_else(|e| e.into_inner()).push((thread as usize, what == "victory-submit", from));
     settle();
     tracing::info!(what, fast = fast.len(), of, "the thread is kept on the fast cores (VICTORY_FAST_CORES=0: not)");
 }
@@ -320,6 +503,57 @@ mod tests {
         // A larger cache of under eight sets: nothing.
         let few: Vec<(u32, u32)> = (0..32).map(|i| (256 + i, if i < 4 { 64 * MB } else { 32 * MB })).collect();
         assert!(fast_by_cache(&sets, &few).is_empty());
+    }
+
+    /// Domains by set id from 256: `per` sets to each cache.
+    fn domains(n: u32, per: u32) -> Vec<(u32, u32)> {
+        (0..n).map(|i| (256 + i, i / per * per)).collect()
+    }
+
+    #[test]
+    fn several_caches_alike_split_into_the_one_with_processor_0_and_the_rest() {
+        let even = |n: u32| -> Vec<(u32, u32)> { (0..n).map(|i| (256 + i, 32 * MB)).collect() };
+        // Two complexes alike (5950X, 7950X, 9950X): 16 sets each.
+        let (near, far) = ccd_split(&alike(32), &even(32), &domains(32, 16)).unwrap();
+        assert_eq!(near, (256..272).collect::<Vec<_>>());
+        assert_eq!(far, (272..288).collect::<Vec<_>>());
+        // Twelve cores (5900X): 12 sets each.
+        let (near, far) = ccd_split(&alike(24), &even(24), &domains(24, 12)).unwrap();
+        assert_eq!((near.len(), far.len()), (12, 12));
+        // Zen 2 (3950X): four caches of eight sets; processor 0's is one of them.
+        let (near, far) = ccd_split(&alike(32), &even(32), &domains(32, 8)).unwrap();
+        assert_eq!((near.len(), far.len()), (8, 24));
+        // One complex (9800X3D): nothing.
+        assert!(ccd_split(&alike(16), &even(16), &domains(16, 16)).is_none());
+        // The stacked cache on one complex (9950X3D): left to `fast_by_cache`.
+        let x3d: Vec<(u32, u32)> = (0..32).map(|i| (256 + i, if i < 16 { 96 * MB } else { 32 * MB })).collect();
+        assert!(ccd_split(&alike(32), &x3d, &domains(32, 16)).is_none());
+        // Two kinds of cores: left to `fast_by_class`.
+        let hybrid: Vec<(u32, u8, u8)> = (0..16).map(|n| (n, 1, n as u8 / 2)).chain((16..24).map(|n| (n, 0, n as u8))).collect();
+        let hd: Vec<(u32, u32)> = (0..24).map(|i| (i, if i < 16 { 0 } else { 16 })).collect();
+        assert!(ccd_split(&hybrid, &[], &hd).is_none());
+        // A set of unknown domain, or nothing known: nothing.
+        assert!(ccd_split(&alike(32), &even(32), &domains(31, 16)).is_none());
+        assert!(ccd_split(&alike(32), &even(32), &[]).is_none());
+    }
+
+    #[test]
+    fn the_mode_reads_far_near_or_off() {
+        assert_eq!(ccd_from(Some("far".into())), Ccd::Far);
+        assert_eq!(ccd_from(Some(" FAR ".into())), Ccd::Far);
+        assert_eq!(ccd_from(Some("1".into())), Ccd::Far);
+        assert_eq!(ccd_from(Some("near".into())), Ccd::Near);
+        assert_eq!(ccd_from(Some("0".into())), Ccd::Off);
+        assert_eq!(ccd_from(Some("other".into())), Ccd::Off);
+        assert_eq!(ccd_from(None), Ccd::Off);
+    }
+
+    #[test]
+    fn this_machine_has_a_domain_for_every_set() {
+        let sets = cpu_sets();
+        let domains = l3_domain_of_sets();
+        assert_eq!(domains.len(), sets.len());
+        assert!(domains.iter().any(|d| d.1 == 0));
     }
 
     #[test]
