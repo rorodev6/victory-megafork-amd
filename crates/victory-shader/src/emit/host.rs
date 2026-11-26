@@ -204,7 +204,11 @@ impl Host {
             let device = device.ok_or("no device")?;
             let sm = shader_model(&device).map_err(err)?;
             if sm.0 < D3D_SHADER_MODEL_6_6.0 {
-                return Err(format!("the device supports SM {:#x} only", sm.0));
+                return Err(format!(
+                    "the device supports SM {:#x} only (on Windows 10, run \
+                     cargo xtask agility and rebuild victory.exe)",
+                    sm.0
+                ));
             }
             Ok(Host { device })
         }
